@@ -18,4 +18,12 @@
 2. Откройте файл `setup.sh` и замените значение переменной `PUBLIC_KEY="..."` на **свой собственный** публичный ключ.
 3. Запустите на своем чистом сервере команду:
    ```bash
-   wget -qO- [https://raw.githubusercontent.com/ВАШ_НИК/server/main/setup.sh](https://raw.githubusercontent.com/ВАШ_НИК/server/main/setup.sh) | sudo bash
+   bash <(curl -sL https://raw.githubusercontent.com/ВАШ_НИК/server/main/setup.sh)
+
+
+# Быстрый старт
+
+Запуск без установки:
+
+```bash
+bash <(curl -sL https://raw.githubusercontent.com/Jzen86/server/main/setup.sh)
