@@ -1,47 +1,35 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# СЮДА ВСТАВЬ СВОЙ РЕАЛЬНЫЙ ПУБЛИЧНЫЙ КЛЮЧ
-PUBLIC_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILxRh4olNu6cTCz7KfIoUVu1O7g5yCN/You2Fp8QkWvY"
+USER_AGENT="Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"
+GEMINI_REGIONS_URL="https://ai.google.dev/gemini-api/docs/available-regions.md.txt"
 
-echo "=== 1. Обновление и очистка сервера ==="
-export DEBIAN_FRONTEND=noninteractive
-apt-get update && apt-get upgrade -y && apt-get autoremove -y
+do_curl() {
+    curl -s --compressed --location --max-time 5 -A "$USER_AGENT" "$@"
+}
 
-echo "=== 2. Настройка каталога SSH и добавление ключа ==="
-mkdir -p ~/.ssh
-chmod 700 ~/.ssh
-touch ~/.ssh/authorized_keys
+echo "=== Проверка доступности Gemini для текущего IP ==="
 
-if ! grep -qF "$PUBLIC_KEY" ~/.ssh/authorized_keys 2>/dev/null; then
-    echo "$PUBLIC_KEY" >> ~/.ssh/authorized_keys
-    echo "Ключ успешно прописан."
+google_response=$(do_curl "https://accounts.google.com/v3/signin/identifier?flowName=GlifSetupAndroid")
+country_code=$(grep -oP 'name="region" value="\K[^"]*' <<< "$google_response")
+
+if [[ -z "$country_code" ]]; then
+    echo "Ошибка: не удалось определить регион через Google."
+    exit 1
 fi
-chmod 600 ~/.ssh/authorized_keys
 
-echo "=== 3. Настройка sshd_config (добавление в начало) ==="
-SSHD_CONFIG="/etc/ssh/sshd_config"
+country_json=$(do_curl "https://www.apicountries.com/alpha/${country_code}")
+country_name=$(jq -r '.name // empty' <<< "$country_json")
 
-# Делаем бэкап оригинала
-cp $SSHD_CONFIG "${SSHD_CONFIG}.bak"
+if [[ -z "$country_name" ]]; then
+    echo "Ошибка: не удалось получить название страны по коду $country_code."
+    exit 1
+fi
 
-# Создаем временный файл с твоими кастомными настройками
-cat << EOF > /tmp/sshd_custom
-PasswordAuthentication no
-PermitRootLogin prohibit-password
-PubkeyAuthentication yes
-AuthorizedKeysFile .ssh/authorized_keys
-ClientAliveInterval 10
-ClientAliveCountMax 60
-EOF
+regions_md=$(do_curl "$GEMINI_REGIONS_URL")
 
-# Склеиваем: новые настройки сверху + старый конфиг снизу
-cat /tmp/sshd_custom $SSHD_CONFIG > /tmp/sshd_combined && mv /tmp/sshd_combined $SSHD_CONFIG
-
-# Подчищаем временный мусор
-rm /tmp/sshd_custom
-
-echo "=== 4. Перезапуск службы SSH ==="
-systemctl restart ssh
-
-echo "=== ВСЁ ГОТОВО! ==="
-echo "Проверяй вход по ключу в новом окне терминала (старое не закрывай!)."
+if grep -qi "^- ${country_name}$" <<< "$regions_md"; then
+    echo -e "Статус Gemini: \033[1;32mДоступно (Yes)\033[00m"
+else
+    echo -e "Статус Gemini: \033[1;31mНедоступно (No)\033[0m"
+    echo -e "Причина: Google видит твою локацию как \033[1;33m$country_name\033[0m ($country_code), а её нет в списке поддерживаемых."
+fi
