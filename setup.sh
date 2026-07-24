@@ -30,6 +30,6 @@ regions_md=$(do_curl "$GEMINI_REGIONS_URL")
 if grep -qi "^- ${country_name}$" <<< "$regions_md"; then
     echo -e "Статус Gemini: \033[1;32mДоступно (Yes)\033[00m"
 else
-    echo -e "Статус Gemini: \033[1;31mНедоступно (\033[1;33m$country_name\033[0m ($country_code))\033[0m"
+    echo -e "Статус Gemini: \033[1;31mНедоступно ()\033[0m"
     echo -e "Причина: Google видит твою локацию как \033[1;33m$country_name\033[0m ($country_code), а её нет в списке поддерживаемых."
 fi
