@@ -16,7 +16,8 @@
 #   страна (US/RU/..)      — точная проверка по официальному API сервиса
 #   Yes / No               — доступность/поддержка
 #   OK / HTTP-код          — эвристика по доступности сайта или API
-#   «Возможен геоблок»     — сайт отдаёт 403/404/406/451 для вашего IP
+#   «Возможна защита/блок» — сайт отдаёт 403/404/406/451 для вашего IP
+#                            (обычно анти-бот защита, не обязательно геоблок)
 # ============================================================================
 
 set -Eeuo pipefail
@@ -70,9 +71,9 @@ norm() {
 
 grepq() { grep "$@" || true; }
 
-status_of() {
-  local code
-  code=$(curl -s -o /dev/null -w '%{http_code}' -L --max-time "$TIMEOUT" -A "$UA" "$1" 2>/dev/null)
+status_of() { # status_of <url> [timeout]
+  local code t="${2:-$TIMEOUT}"
+  code=$(curl -s -o /dev/null -w '%{http_code}' -L --max-time "$t" -A "$UA" "$1" 2>/dev/null)
   [[ -n "$code" ]] && echo "$code" || echo "000"
 }
 
@@ -82,7 +83,7 @@ status_label() {
     200|201|202|204) echo "OK (HTTP $code)" ;;
     301|302|303|307|308) echo "OK (redirect $code)" ;;
     401) echo "Доступен (HTTP 401 — нужен ключ)" ;;
-    403|404|405|406|451) echo "Возможен геоблок (HTTP $code)" ;;
+    403|404|405|406|451) echo "Возможна защита/блок (HTTP $code)" ;;
     429) echo "Rate-limit (HTTP 429)" ;;
     000) echo "Нет ответа" ;;
     *) echo "HTTP $code" ;;
@@ -171,7 +172,7 @@ check_chatgpt() {
 }
 
 check_claude() {
-  add_result "ai" "Claude (claude.ai)" "$(status_label "$(status_of "https://claude.ai/")")"
+  add_result "ai" "Claude (claude.ai)" "$(status_label "$(status_of "https://claude.ai/" 15)")"
 }
 
 check_perplexity() {
@@ -401,7 +402,7 @@ check_dazn() {
   region=$(grepq -oP '"GeolocatedCountry"\s{0,}:\s{0,}"\K[^"]+' <<<"$body" | tr 'a-z' 'A-Z')
   if [[ "$allowed" == "true" ]]; then add_result "leftrf" "DAZN" "Yes (Region: ${region:-N/A})"; return; fi
   if [[ "$allowed" == "false" ]]; then add_result "leftrf" "DAZN" "No"; return; fi
-  add_result "leftrf" "DAZN" "Failed (Error: ${allowed:-Unknown})"
+  add_result "leftrf" "DAZN" "Failed (HTTP $REQ_CODE)"
 }
 
 # ============================================================================
@@ -438,7 +439,7 @@ fmt_value() {
     Yes*)                      echo -e "${GREEN}${v}${NC}" ;;
     No*)                       echo -e "${RED}${v}${NC}" ;;
     *"(Region:"*)              echo -e "${GREEN}${v}${NC}" ;;
-    *"геоблок"*)               echo -e "${RED}${v}${NC}" ;;
+    *"защита"*)                echo -e "${RED}${v}${NC}" ;;
     *"Failed"*)                echo -e "${YELLOW}${v}${NC}" ;;
     *"OK"*)                    echo -e "${GREEN}${v}${NC}" ;;
     *"Доступен"*)              echo -e "${GREEN}${v}${NC}" ;;
@@ -517,7 +518,7 @@ main() {
   print_section "Ушедшие из РФ" "leftrf"
   print_section "Креативные ИИ" "creative"
 
-  echo -e "\n${GRAY}— страна (US/RU/..) = точная проверка по API сервиса; OK/HTTP-код = эвристика по доступности; «Возможен геоблок» = 403/404/451 для вашего IP${NC}"
+  echo -e "\n${GRAY}— страна (US/RU/..) = точная проверка по API сервиса; OK/HTTP-код = эвристика по доступности; «Возможна защита/блок» = 403/404/451 (обычно анти-бот защита датацентровых IP)${NC}"
 }
 
 main "$@"
