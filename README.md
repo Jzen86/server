@@ -47,4 +47,4 @@ bash <(curl -sL https://raw.githubusercontent.com/Jzen86/server/main/check-servi
 
 ---
 
-> Этот репозиторий и все скрипты в нём созданы с помощью ИИ (opencode).
+> Этот репозиторий и все скрипты в нём созданы с помощью ИИ — [opencode](https://opencode.ai).
