@@ -94,6 +94,10 @@ run_script() {
 }
 
 # --- меню ---------------------------------------------------------------------
+clear_screen() {
+  printf '\033[2J\033[H'
+}
+
 show_menu() {
   echo -e "${CYAN}============================================================${NC}"
   echo -e "${WHITE}  Проверки VPS-сервера${NC}"
@@ -105,18 +109,50 @@ show_menu() {
   echo ""
 }
 
+# Приглашение после проверки: только «0) Выход/Назад».
+wait_return() {
+  while true; do
+    echo ""
+    echo -e "  ${WHITE}0${NC}) Выход/Назад"
+    read -r -p "  Ваш выбор: " choice || true
+    choice="${choice//$'\r'/}"
+
+    case "$choice" in
+      0 | q | Q | exit)
+        return 0
+        ;;
+      "")
+        ;;
+      *)
+        echo -e "${RED}  Неверный выбор: ${choice}${NC}"
+        ;;
+    esac
+  done
+}
+
 main() {
   check_deps
 
   while true; do
+    clear_screen
     show_menu
     read -r -p "  Ваш выбор: " choice || true
     choice="${choice//$'\r'/}"
 
     case "$choice" in
-      1) run_script "${SCRIPT_NAMES[0]}" ;;
-      2) run_script "${SCRIPT_NAMES[1]}" ;;
-      3) run_script "${SCRIPT_NAMES[0]}"; run_script "${SCRIPT_NAMES[1]}" ;;
+      1)
+        run_script "${SCRIPT_NAMES[0]}"
+        wait_return
+        ;;
+      2)
+        run_script "${SCRIPT_NAMES[1]}"
+        wait_return
+        ;;
+      3)
+        run_script "${SCRIPT_NAMES[0]}"
+        run_script "${SCRIPT_NAMES[1]}"
+        wait_return
+        ;;
       0 | q | Q | exit)
         echo -e "${GRAY}  Выход${NC}"
         exit 0
