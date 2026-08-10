@@ -6,7 +6,7 @@
 
 | Скрипт | Назначение |
 |---|---|
-| `setup.sh` | Меню: запуск `check-location.sh`, `check-services.sh` или обоих по очереди |
+| `server-check.sh` | Меню: запуск `check-location.sh`, `check-services.sh` или обоих по очереди |
 | `check-location.sh` | Геолокация IP по 18 GeoIP-базам, подсчёт голосов, вердикт «ЧИСТЫЙ/ГРЯЗНЫЙ» |
 | `check-services.sh` | Как IP видят Google, топ ИИ и сервисы, ушедшие из РФ |
 
@@ -16,10 +16,10 @@
 
 ## Запуск (без установки)
 
-Меню всех проверок (`setup.sh`):
+Меню всех проверок (`server-check.sh`):
 
 ```bash
-bash <(curl -sL https://raw.githubusercontent.com/Jzen86/server/main/setup.sh)
+bash <(curl -sL https://raw.githubusercontent.com/Jzen86/server/main/server-check.sh)
 ```
 
 При выборе 1 запустится `check-location.sh`, при выборе 2 — `check-services.sh`, при выборе 3 — оба по очереди, 0 — выход.

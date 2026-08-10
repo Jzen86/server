@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# setup.sh — меню для запуска скриптов репозитория server:
+# server-check.sh — меню для запуска скриптов репозитория server:
 #
 #   1) Запустить проверку геолокации по IP           -> check-location.sh
 #   2) Запустить проверку на доступность сервисов     -> check-services.sh
@@ -8,10 +8,10 @@
 #   0) Выход
 #
 # Запуск:
-#   bash setup.sh                          # локальная копия рядом с файлами
-#   bash <(curl -sL https://raw.githubusercontent.com/Jzen86/server/main/setup.sh)
+#   bash server-check.sh                  # локальная копия рядом с файлами
+#   bash <(curl -sL https://raw.githubusercontent.com/Jzen86/server/main/server-check.sh)
 #
-# Скрипты ищутся в той же папке, что и setup.sh. Если их там нет —
+# Скрипты ищутся в той же папке, что и server-check.sh. Если их там нет —
 # они скачиваются с GitHub во временный файл и запускаются.
 #
 # Зависимости: curl (для скачивания), jq (нужен check-скриптам)
