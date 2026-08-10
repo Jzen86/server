@@ -109,11 +109,11 @@ show_menu() {
   echo ""
 }
 
-# Приглашение после проверки: только «0) Выход/Назад».
+# Приглашение после проверки: только «0) Назад в меню».
 wait_return() {
   while true; do
     echo ""
-    echo -e "  ${WHITE}0${NC}) Выход/Назад"
+    echo -e "  ${WHITE}0${NC}) Назад в меню"
     read -r -p "  Ваш выбор: " choice || true
     choice="${choice//$'\r'/}"
 
@@ -141,14 +141,17 @@ main() {
 
     case "$choice" in
       1)
+        clear_screen
         run_script "${SCRIPT_NAMES[0]}"
         wait_return
         ;;
       2)
+        clear_screen
         run_script "${SCRIPT_NAMES[1]}"
         wait_return
         ;;
       3)
+        clear_screen
         run_script "${SCRIPT_NAMES[0]}"
         run_script "${SCRIPT_NAMES[1]}"
         wait_return
