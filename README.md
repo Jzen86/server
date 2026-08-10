@@ -6,7 +6,7 @@
 
 | Скрипт | Назначение |
 |---|---|
-| `setup.sh` | Установка `ipregion.sh` (оригинальный скрипт vernette/ipregion) |
+| `setup.sh` | Меню: запуск `check-location.sh`, `check-services.sh` или обоих по очереди |
 | `check-location.sh` | Геолокация IP по 18 GeoIP-базам, подсчёт голосов, вердикт «ЧИСТЫЙ/ГРЯЗНЫЙ» |
 | `check-services.sh` | Как IP видят Google, топ ИИ и сервисы, ушедшие из РФ |
 
@@ -16,13 +16,15 @@
 
 ## Запуск (без установки)
 
-Установка ipregion:
+Меню всех проверок (`setup.sh`):
 
 ```bash
 bash <(curl -sL https://raw.githubusercontent.com/Jzen86/server/main/setup.sh)
 ```
 
-Геолокация IP:
+При выборе 1 запустится `check-location.sh`, при выборе 2 — `check-services.sh`, при выборе 3 — оба по очереди, 0 — выход.
+
+Геолокация IP напрямую:
 
 ```bash
 bash <(curl -sL https://raw.githubusercontent.com/Jzen86/server/main/check-location.sh)
