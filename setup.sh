@@ -95,7 +95,12 @@ run_script() {
 
 # --- меню ---------------------------------------------------------------------
 clear_screen() {
-  printf '\033[2J\033[H'
+  if command -v clear >/dev/null 2>&1; then
+    clear
+    printf '\033[3J'
+  else
+    printf '\033[2J\033[3J\033[H'
+  fi
 }
 
 show_menu() {
