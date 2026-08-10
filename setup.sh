@@ -157,7 +157,7 @@ main() {
         wait_return
         ;;
       0 | q | Q | exit)
-        echo -e "${GRAY}  Выход${NC}"
+        clear_screen
         exit 0
         ;;
       "")
