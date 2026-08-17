@@ -53,4 +53,4 @@ bash <(curl -sL https://raw.githubusercontent.com/Jzen86/server/main/check-servi
 
 MIT — можно использовать, копировать и изменять свободно.
 
-> Этот репозиторий и все скрипты в нём созданы ИИ-агентами на платформе opencode.
+> Этот репозиторий и все скрипты в нём созданы ИИ-агентами на платформе [opencode](https://opencode.ai).
