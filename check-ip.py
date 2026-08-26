@@ -3,17 +3,23 @@
 IP Block Checker for Russian Blocklists
 Checks if an IP/domain is in Roskomnadzor or CDN blocklists.
 
+Использует готовую базу blocklist.json (генерируется build-blocklist.py
+в GitHub Actions и коммитится в репо). Скрипт качает свежий файл
+одним запросом — быстро и всегда актуально. Тяжёлый реестр РКН
+доменов (1.59M записей) тянется напрямую с antifilter.download на лету.
+
 Usage:
   python3 check-ip.py [IP or domain]
-  curl -sL https://raw.githubusercontent.com/YOU/YOUR_REPO/main/check-ip.py | python3 - [IP]
+  python3 check-ip.py [IP or domain] --db /path/to/blocklist.json
 """
 import urllib.request
 import ssl
 import sys
+import os
 import io
+import json
 import ipaddress
 import socket
-import json
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -21,50 +27,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 # ─── Config ───────────────────────────────────────────────────────────────────
-TIMEOUT = 15
+TIMEOUT = 20
 MAX_WORKERS = 8
 
-SOURCES = {
-    "antifilter": [
-        ("antifilter.download — IP (резолвинг)", "https://antifilter.download/list/ip.lst"),
-        ("antifilter.download — IP (/24 суммаризация)", "https://antifilter.download/list/ipsum.lst"),
-        ("antifilter.download — Подсети", "https://antifilter.download/list/subnet.lst"),
-    ],
-    "rkn_domains": [
-        ("Реестр РКН — Домены", "https://antifilter.download/list/domains.lst"),
-    ],
-    "cdn": [
-        ("CDN-провайдеры (все)", "https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/main/all/all_plain_ipv4.txt"),
-        ("CDN-провайдеры (только CDN)", "https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/main/cdn-only/cdn-only_plain_ipv4.txt"),
-        ("Akamai", "https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/main/akamai/akamai_plain_ipv4.txt"),
-        ("AWS CloudFront", "https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/main/aws/aws_plain_ipv4.txt"),
-        ("Bunny CDN", "https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/main/bunny/bunny_plain_ipv4.txt"),
-        ("CDN77", "https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/main/cdn77/cdn77_plain_ipv4.txt"),
-        ("Cloudflare", "https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/main/cloudflare/cloudflare_plain_ipv4.txt"),
-        ("DigitalOcean", "https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/main/digitalocean/digitalocean_plain_ipv4.txt"),
-        ("Fastly", "https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/main/fastly/fastly_plain_ipv4.txt"),
-        ("GCore", "https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/main/gcore/gcore_plain_ipv4.txt"),
-        ("Hetzner", "https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/main/hetzner/hetzner_plain_ipv4.txt"),
-        ("OVH", "https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/main/ovh/ovh_plain_ipv4.txt"),
-        ("Scaleway", "https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/main/scaleway/scaleway_plain_ipv4.txt"),
-        ("Vercel", "https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/main/vercel/vercel_plain_ipv4.txt"),
-    ],
-    "geosite": [
-        ("RoscomVPN — YouTube", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/youtube"),
-        ("RoscomVPN — Telegram", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/telegram"),
-        ("RoscomVPN — GitHub", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/github"),
-        ("RoscomVPN — Google Play", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/google-play"),
-        ("RoscomVPN — Microsoft", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/microsoft"),
-        ("RoscomVPN — Steam", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/steam"),
-        ("RoscomVPN — Epic Games", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/epicgames"),
-        ("RoscomVPN — Riot Games", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/riot"),
-        ("RoscomVPN — Twitch", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/twitch"),
-        ("RoscomVPN — Google AI", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/google-deepmind"),
-        ("RoscomVPN — Торренты", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/torrent"),
-        ("RoscomVPN — Windows Spy", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/win-spy"),
-        ("RoscomVPN — Реклама", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/category-ads"),
-    ],
-}
+# Готовая база в репо (генерируется build-blocklist.py + GitHub Actions)
+DB_URL = "https://raw.githubusercontent.com/Jzen86/server/main/blocklist.json"
+LOCAL_DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "blocklist.json")
+
+# Живой источник реестра РКН доменов (тяжёлый — не идёт в базу, тянем на лету)
+RKN_DOMAINS_URL = "https://antifilter.download/list/domains.lst"
 
 ASN_NAMES = {
     "AS13335": "Cloudflare", "AS15169": "Google", "AS16509": "Amazon (AWS)",
@@ -98,23 +69,30 @@ def get(url, binary=False):
     except Exception:
         return None
 
-def parse_cidrs(text):
-    networks = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if "/" in line:
-            try:
-                networks.append(ipaddress.ip_network(line, strict=False))
-            except ValueError:
-                pass
-        elif "." in line or ":" in line:
-            try:
-                networks.append(ipaddress.ip_network(line, strict=False))
-            except ValueError:
-                pass
-    return networks
+
+def load_db(db_path=None):
+    """Загружает базу: локальный файл или скачивает DB_URL."""
+    local = db_path or LOCAL_DB
+    if db_path:
+        if not os.path.exists(db_path):
+            print(f"  X Файл базы не найден: {db_path}")
+            sys.exit(1)
+        with open(db_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    if os.path.exists(local):
+        with open(local, "r", encoding="utf-8") as f:
+            return json.load(f)
+    pr(C.DIM, "  Скачиваю свежую базу blocklist.json...")
+    content = get(DB_URL)
+    if content is None:
+        print("  X Не удалось скачать базу. Используйте --db с локальным файлом.")
+        sys.exit(1)
+    return json.loads(content)
+
+
+def networks_for_source(cidr_list):
+    return [ipaddress.ip_network(c, strict=False) for c in cidr_list]
+
 
 def check_ip_in_networks(ip, networks):
     addr = ipaddress.ip_address(ip)
@@ -123,6 +101,7 @@ def check_ip_in_networks(ip, networks):
         if addr in net:
             matches.append(str(net))
     return matches
+
 
 def resolve_domain(domain):
     ips = set()
@@ -134,11 +113,12 @@ def resolve_domain(domain):
             pass
     return list(ips)
 
+
 def detect_ip_version(ip):
     return "ipv6" if ":" in ip else "ipv4"
 
+
 def get_asn_info(ip):
-    # Try bgp.tools API (free, no key needed)
     try:
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
@@ -148,21 +128,17 @@ def get_asn_info(ip):
             headers={"User-Agent": "Mozilla/5.0"}
         )
         with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
-            # bgp.tools returns HTML, parse ASN from it
             html = r.read().decode("utf-8", errors="replace")
-            # Look for AS number pattern
             import re
             as_match = re.search(r'AS(\d+)', html)
             if as_match:
                 asn = f"AS{as_match.group(1)}"
-                # Try to find org name
                 org_match = re.search(r'<td[^>]*>Organization</td>\s*<td[^>]*>([^<]+)', html)
                 org = org_match.group(1).strip() if org_match else None
                 return asn, org
     except Exception:
         pass
 
-    # Fallback: try whois
     try:
         r = subprocess.run(["whois", ip], capture_output=True, text=True, timeout=10)
         if r.returncode == 0:
@@ -186,8 +162,10 @@ def get_asn_info(ip):
 
     return None, None
 
+
 def format_number(n):
     return f"{n:,}".replace(",", " ")
+
 
 # ─── Color helpers ────────────────────────────────────────────────────────────
 
@@ -212,12 +190,18 @@ def section(text):
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
+    args = [a for a in sys.argv[1:]]
+    db_path = None
+    if "--db" in args:
+        i = args.index("--db")
+        db_path = args[i + 1]
+        del args[i:i + 2]
+    target = args[0] if args else None
+
     print()
     pr(C.BLD, "╔══════════════════════════════════════════════════════════════╗")
     pr(C.BLD, "║           IP BLOCK CHECKER — Russia & CDN Lists            ║")
     pr(C.BLD, "╚══════════════════════════════════════════════════════════════╝")
-
-    target = sys.argv[1] if len(sys.argv) > 1 else None
 
     if not target:
         pr(C.DIM, "  Определяю внешний IP...")
@@ -237,6 +221,7 @@ def main():
             sys.exit(1)
         pr(C.GRN, f"  Внешний IP: {target}")
 
+    # ── Цель ──
     is_domain = any(c.isalpha() for c in target) and "." in target and not target.replace(".", "").replace(":", "").isdigit()
     check_ips = []
     domain_name = None
@@ -254,7 +239,7 @@ def main():
         pr(C.BLU, f"\n  IP-адрес: {target}")
         pr(C.DIM, f"  Тип: {detect_ip_version(target).upper()}")
 
-    # ASN lookup
+    # ── ASN ──
     section("ASN / Провайдер")
     for check_ip in check_ips:
         if ":" in check_ip:
@@ -269,143 +254,116 @@ def main():
         if not asn and not org:
             pr(C.DIM, "  ASN не определён (сервисы whois/bgptools недоступны)")
 
-    # Download blocklists
-    section("Загрузка списков блокировок")
-    all_networks = {}
-    total_networks = 0
-    domain_sources = {}  # name -> list of domains
+    # ── Загрузка базы ──
+    section("Загрузка базы блокировок")
+    db = load_db(db_path)
+    data = db.get("data", {})
+    generated = db.get("generated", "?")
+    n_sources = len(db.get("sources", []))
+    pr(C.GRN, f"  База v{db.get('version', 1)} | источников: {n_sources} | обновлена: {generated}")
+    if db.get("errors"):
+        pr(C.YLW, f"  (пропущено источников с ошибкой: {len(db['errors'])})")
 
-    def download_source(name, url):
-        content = get(url)
-        if content is None:
-            return name, None, 0, None
-        if "geosite" in url or "domains.lst" in url:
-            return name, None, 0, content
-        networks = parse_cidrs(content)
-        return name, networks, len(networks), None
+    # Кэшируем сети по категориям
+    net_cache = {}
+    for cat in ("antifilter", "cdn"):
+        net_cache[cat] = {
+            src: networks_for_source(cidrs)
+            for src, cidrs in data.get(cat, {}).items()
+        }
 
-    tasks = []
-    for category, sources in SOURCES.items():
-        for name, url in sources:
-            tasks.append((name, url))
-
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        futures = {pool.submit(download_source, n, u): n for n, u in tasks}
-        done = 0
-        for future in as_completed(futures):
-            done += 1
-            name, networks, count, domains = future.result()
-            if networks is None and domains is None:
-                pr(C.DIM, f"  [{done}/{len(tasks)}] {name}: ошибка загрузки")
-                all_networks[name] = []
-            elif domains is not None:
-                parsed = []
-                for line in domains.splitlines():
-                    line = line.strip()
-                    if not line or line.startswith("#"):
-                        continue
-                    if line.startswith("domain:"):
-                        line = line[7:]
-                    if line:
-                        parsed.append(line.lower())
-                domain_sources[name] = parsed
-                pr(C.GRN, f"  [{done}/{len(tasks)}] {name}: {len(parsed)} доменов")
-            else:
-                pr(C.GRN, f"  [{done}/{len(tasks)}] {name}: {format_number(count)} CIDR")
-                all_networks[name] = networks
-                total_networks += count
-
-    pr(C.DIM, f"\n  Всего загружено: {format_number(total_networks)} CIDR-записей, {len(domain_sources)} доменных списков")
-
-    # Check IP against all lists
+    # ── Проверка IP ──
     section("Проверка IP")
 
     antifilter_blocked = False
     cdn_blocked = False
     cdn_providers = set()
-    domain_blocked = False
     all_matches = {}
 
     for check_ip in check_ips:
         pr(C.DIM, f"  Проверяю {check_ip}...")
+        for cat in ("antifilter", "cdn"):
+            for src, nets in net_cache[cat].items():
+                matches = check_ip_in_networks(check_ip, nets)
+                if matches:
+                    all_matches[src] = matches[:3]
+                    if cat == "antifilter":
+                        antifilter_blocked = True
+                    elif cat == "cdn":
+                        cdn_blocked = True
+                        cdn_providers.add(src)
 
-        for source_name, networks in all_networks.items():
-            if not networks:
-                continue
-            matches = check_ip_in_networks(check_ip, networks)
-            if matches:
-                all_matches[source_name] = matches[:3]
-
-                for cat, sources in SOURCES.items():
-                    for sname, _ in sources:
-                        if sname == source_name:
-                            if cat == "antifilter":
-                                antifilter_blocked = True
-                            elif cat == "cdn":
-                                cdn_blocked = True
-                                cdn_providers.add(source_name)
-
-    # Domain check
+    # ── Проверка домена ──
+    domain_blocked = False
     domain_matched_sources = []
-    if domain_name and domain_sources:
+    if domain_name:
         domain_lower = domain_name.lower()
-        for src_name, domains in domain_sources.items():
-            for d in domains:
-                if domain_lower == d or domain_lower.endswith("." + d):
-                    domain_matched_sources.append(src_name)
+        # Реестр РКН (живой, тянем напрямую)
+        pr(C.DIM, "  Проверяю домен в реестре РКН (antifilter.download)...")
+        rkn_content = get(RKN_DOMAINS_URL)
+        if rkn_content:
+            for line in rkn_content.splitlines():
+                d = line.strip().lower()
+                if not d or d.startswith("#"):
+                    continue
+                if d.startswith("domain:"):
+                    d = d[7:]
+                if d and (domain_lower == d or domain_lower.endswith("." + d)):
                     domain_blocked = True
+                    domain_matched_sources.append("Реестр РКН - Домены")
+                    break
+        else:
+            pr(C.DIM, "  (реестр РКН недоступен, проверяю только по geosite)")
+        # Geosite из базы
+        if not domain_blocked:
+            for src, domains in data.get("geosite", {}).items():
+                for d in domains:
+                    if domain_lower == d or domain_lower.endswith("." + d):
+                        domain_blocked = True
+                        domain_matched_sources.append(src)
+                        break
+                if domain_blocked:
                     break
 
-    # Results
+    # ── Результат ──
     section("Результат")
 
     is_clean = not antifilter_blocked and not cdn_blocked and not domain_blocked
 
     if is_clean:
-        pr(C.GRN, C.BLD, 1)
         pr(C.GRN, "  V ЧИСТ", 1)
         pr(C.GRN, "  IP-адрес не найден ни в одном списке блокировок", 1)
         pr(C.GRN, "  Ограничений на территории РФ не обнаружено", 1)
     else:
-        pr(C.RED, C.BLD, 1)
         pr(C.RED, "  X ЗАБЛОКИРОВАН", 1)
 
         if antifilter_blocked:
-            pr(C.RED, "", 1)
-            pr(C.RED, "  > Реестр РКН (antifilter.download):", 1)
+            pr(C.RED, "  > Реестр РКН (IP/подсети):", 1)
             for src_name, matches in all_matches.items():
-                for cat, sources in SOURCES.items():
-                    if cat == "antifilter":
-                        for sname, _ in sources:
-                            if sname == src_name:
-                                pr(C.RED, f"    - {src_name}", 2)
-                                for m in matches[:2]:
-                                    pr(C.DIM, f"      {m}", 2)
+                if src_name in net_cache.get("antifilter", {}):
+                    pr(C.RED, f"    - {src_name}", 2)
+                    for m in matches[:2]:
+                        pr(C.DIM, f"      {m}", 2)
 
         if cdn_blocked:
-            pr(C.RED, "", 1)
             pr(C.RED, "  > CDN / Хостинг (фактическая блокировка):", 1)
             for src_name, matches in all_matches.items():
-                for cat, sources in SOURCES.items():
-                    if cat == "cdn":
-                        for sname, _ in sources:
-                            if sname == src_name:
-                                pr(C.RED, f"    - {src_name}", 2)
-                                for m in matches[:2]:
-                                    pr(C.DIM, f"      {m}", 2)
+                if src_name in net_cache.get("cdn", {}):
+                    pr(C.RED, f"    - {src_name}", 2)
+                    for m in matches[:2]:
+                        pr(C.DIM, f"      {m}", 2)
 
         if domain_blocked:
-            pr(C.RED, "", 1)
             pr(C.RED, "  > Домен найден в списках блокировок:", 1)
             for src in domain_matched_sources:
                 pr(C.RED, f"    - {src}", 2)
             pr(C.RED, f"    Домен {domain_name} заблокирован", 2)
 
-    # CDN provider summary
+    # ── CDN summary ──
     if cdn_providers:
         section("CDN / Хостинг")
         for p in sorted(cdn_providers):
-            clean = p.split(" — ")[0] if " — " in p else p
+            clean = p.split(" - ")[0] if " - " in p else p
             pr(C.YLW, f"  * {clean}")
         if any("Cloudflare" in p for p in cdn_providers):
             pr(C.DIM, "    -> Cloudflare CDN (CDN-блок: трафик режется на 16-20 КБ)")
@@ -414,21 +372,19 @@ def main():
         elif any("Hetzner" in p for p in cdn_providers):
             pr(C.DIM, "    -> Хостинг Hetzner (подсеть в блок-листе CDN)")
 
-    # Verdict
+    # ── Итого ──
     section("Итого")
     pr(C.BLD, "  " + "-" * 54)
     if is_clean:
-        pr(C.GRN, C.BLD, 1)
         pr(C.GRN, "  ВЕРДИКТ: ЧИСТ - ограничений не обнаружено", 1)
     else:
         issues = []
         if antifilter_blocked:
-            issues.append("реестр РКН")
+            issues.append("реестр РКН (IP)")
         if cdn_blocked:
             issues.append("CDN-блок")
         if domain_blocked:
-            issues.append("домен в реестре")
-        pr(C.RED, C.BLD, 1)
+            issues.append("домен в списках")
         pr(C.RED, f"  ВЕРДИКТ: ЗАБЛОКИРОВАН - {', '.join(issues)}", 1)
     pr(C.BLD, "  " + "-" * 54)
     print()
