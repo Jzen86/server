@@ -201,26 +201,41 @@ def main():
     pr(C.BLD, "╔══════════════════════════════════════════════════════════════╗")
     pr(C.BLD, "║           IP BLOCK CHECKER — Russia & CDN Lists            ║")
     pr(C.BLD, "╚══════════════════════════════════════════════════════════════╝")
+    print()
 
     target = sys.argv[1] if len(sys.argv) > 1 else None
 
     if not target:
-        pr(C.DIM, "  Определяю внешний IP...")
-        for svc in ["https://api.ipify.org", "https://ifconfig.me", "https://icanhazip.com"]:
-            try:
-                ctx = ssl.create_default_context()
-                ctx.check_hostname = False
-                ctx.verify_mode = ssl.CERT_NONE
-                req = urllib.request.Request(svc, headers={"User-Agent": "curl/7.88"})
-                with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
-                    target = r.read().decode().strip()
-                    break
-            except Exception:
-                continue
-        if not target:
-            pr(C.RED, "  X Не удалось определить внешний IP. Укажите вручную.")
+        pr(C.CYN, "  1. Проверить сервер")
+        pr(C.CYN, "  2. Проверить другой IP / домен")
+        print()
+        choice = input("  Ваш выбор: ").strip()
+
+        if choice == "1":
+            pr(C.DIM, "\n  Определяю внешний IP...")
+            for svc in ["https://api.ipify.org", "https://ifconfig.me", "https://icanhazip.com"]:
+                try:
+                    ctx = ssl.create_default_context()
+                    ctx.check_hostname = False
+                    ctx.verify_mode = ssl.CERT_NONE
+                    req = urllib.request.Request(svc, headers={"User-Agent": "curl/7.88"})
+                    with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
+                        target = r.read().decode().strip()
+                        break
+                except Exception:
+                    continue
+            if not target:
+                pr(C.RED, "  X Не удалось определить внешний IP.")
+                sys.exit(1)
+            pr(C.GRN, f"  Внешний IP: {target}")
+        elif choice == "2":
+            target = input("\n  Введите IP или домен: ").strip()
+            if not target:
+                pr(C.RED, "  X Пустой ввод.")
+                sys.exit(1)
+        else:
+            pr(C.RED, "  X Неверный выбор.")
             sys.exit(1)
-        pr(C.GRN, f"  Внешний IP: {target}")
 
     is_domain = any(c.isalpha() for c in target) and "." in target and not target.replace(".", "").replace(":", "").isdigit()
     check_ips = []
