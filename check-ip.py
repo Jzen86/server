@@ -49,6 +49,21 @@ SOURCES = {
         ("Scaleway", "https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/main/scaleway/scaleway_plain_ipv4.txt"),
         ("Vercel", "https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/main/vercel/vercel_plain_ipv4.txt"),
     ],
+    "geosite": [
+        ("RoscomVPN — YouTube", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/youtube"),
+        ("RoscomVPN — Telegram", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/telegram"),
+        ("RoscomVPN — GitHub", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/github"),
+        ("RoscomVPN — Google Play", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/google-play"),
+        ("RoscomVPN — Microsoft", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/microsoft"),
+        ("RoscomVPN — Steam", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/steam"),
+        ("RoscomVPN — Epic Games", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/epicgames"),
+        ("RoscomVPN — Riot Games", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/riot"),
+        ("RoscomVPN — Twitch", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/twitch"),
+        ("RoscomVPN — Google AI", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/google-deepmind"),
+        ("RoscomVPN — Торренты", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/torrent"),
+        ("RoscomVPN — Windows Spy", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/win-spy"),
+        ("RoscomVPN — Реклама", "https://raw.githubusercontent.com/hydraponique/roscomvpn-geosite/master/data/category-ads"),
+    ],
 }
 
 ASN_NAMES = {
@@ -201,41 +216,26 @@ def main():
     pr(C.BLD, "╔══════════════════════════════════════════════════════════════╗")
     pr(C.BLD, "║           IP BLOCK CHECKER — Russia & CDN Lists            ║")
     pr(C.BLD, "╚══════════════════════════════════════════════════════════════╝")
-    print()
 
     target = sys.argv[1] if len(sys.argv) > 1 else None
 
     if not target:
-        pr(C.CYN, "  1. Проверить сервер")
-        pr(C.CYN, "  2. Проверить другой IP / домен")
-        print()
-        choice = input("  Ваш выбор: ").strip()
-
-        if choice == "1":
-            pr(C.DIM, "\n  Определяю внешний IP...")
-            for svc in ["https://api.ipify.org", "https://ifconfig.me", "https://icanhazip.com"]:
-                try:
-                    ctx = ssl.create_default_context()
-                    ctx.check_hostname = False
-                    ctx.verify_mode = ssl.CERT_NONE
-                    req = urllib.request.Request(svc, headers={"User-Agent": "curl/7.88"})
-                    with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
-                        target = r.read().decode().strip()
-                        break
-                except Exception:
-                    continue
-            if not target:
-                pr(C.RED, "  X Не удалось определить внешний IP.")
-                sys.exit(1)
-            pr(C.GRN, f"  Внешний IP: {target}")
-        elif choice == "2":
-            target = input("\n  Введите IP или домен: ").strip()
-            if not target:
-                pr(C.RED, "  X Пустой ввод.")
-                sys.exit(1)
-        else:
-            pr(C.RED, "  X Неверный выбор.")
+        pr(C.DIM, "  Определяю внешний IP...")
+        for svc in ["https://api.ipify.org", "https://ifconfig.me", "https://icanhazip.com"]:
+            try:
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                req = urllib.request.Request(svc, headers={"User-Agent": "curl/7.88"})
+                with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
+                    target = r.read().decode().strip()
+                    break
+            except Exception:
+                continue
+        if not target:
+            pr(C.RED, "  X Не удалось определить внешний IP. Укажите вручную.")
             sys.exit(1)
+        pr(C.GRN, f"  Внешний IP: {target}")
 
     is_domain = any(c.isalpha() for c in target) and "." in target and not target.replace(".", "").replace(":", "").isdigit()
     check_ips = []
@@ -273,13 +273,13 @@ def main():
     section("Загрузка списков блокировок")
     all_networks = {}
     total_networks = 0
-    domain_list = []
+    domain_sources = {}  # name -> list of domains
 
     def download_source(name, url):
         content = get(url)
         if content is None:
             return name, None, 0, None
-        if url.endswith("domains.lst"):
+        if "geosite" in url or "domains.lst" in url:
             return name, None, 0, content
         networks = parse_cidrs(content)
         return name, networks, len(networks), None
@@ -299,14 +299,23 @@ def main():
                 pr(C.DIM, f"  [{done}/{len(tasks)}] {name}: ошибка загрузки")
                 all_networks[name] = []
             elif domains is not None:
-                pr(C.GRN, f"  [{done}/{len(tasks)}] {name}: доменов в списке")
-                domain_list = domains.splitlines()
+                parsed = []
+                for line in domains.splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if line.startswith("domain:"):
+                        line = line[7:]
+                    if line:
+                        parsed.append(line.lower())
+                domain_sources[name] = parsed
+                pr(C.GRN, f"  [{done}/{len(tasks)}] {name}: {len(parsed)} доменов")
             else:
                 pr(C.GRN, f"  [{done}/{len(tasks)}] {name}: {format_number(count)} CIDR")
                 all_networks[name] = networks
                 total_networks += count
 
-    pr(C.DIM, f"\n  Всего загружено: {format_number(total_networks)} CIDR-записей")
+    pr(C.DIM, f"\n  Всего загружено: {format_number(total_networks)} CIDR-записей, {len(domain_sources)} доменных списков")
 
     # Check IP against all lists
     section("Проверка IP")
@@ -337,13 +346,15 @@ def main():
                                 cdn_providers.add(source_name)
 
     # Domain check
-    if domain_name and domain_list:
+    domain_matched_sources = []
+    if domain_name and domain_sources:
         domain_lower = domain_name.lower()
-        for d in domain_list:
-            d = d.strip().lower()
-            if d and (domain_lower == d or domain_lower.endswith("." + d)):
-                domain_blocked = True
-                break
+        for src_name, domains in domain_sources.items():
+            for d in domains:
+                if domain_lower == d or domain_lower.endswith("." + d):
+                    domain_matched_sources.append(src_name)
+                    domain_blocked = True
+                    break
 
     # Results
     section("Результат")
@@ -385,8 +396,10 @@ def main():
 
         if domain_blocked:
             pr(C.RED, "", 1)
-            pr(C.RED, "  > Домен в реестре РКН:", 1)
-            pr(C.RED, f"    Домен {domain_name} найден в списке заблокированных", 2)
+            pr(C.RED, "  > Домен найден в списках блокировок:", 1)
+            for src in domain_matched_sources:
+                pr(C.RED, f"    - {src}", 2)
+            pr(C.RED, f"    Домен {domain_name} заблокирован", 2)
 
     # CDN provider summary
     if cdn_providers:
